@@ -1,5 +1,5 @@
-# 세계 인구수 시각화
-### REST Countries에서 Google Sheets로, 그리고 Google Data Studio로
+# 세계 인구수 시각화를 위한 데이터 수집 및 시각화 과정
+### REST Countries API, Google Sheets, 그리고 Google Data Studio 활용하기
 
 ## 1. 프로젝트 개요
 
@@ -20,7 +20,6 @@ pip install gspread oauth2client requests
 - gspread
 - requests
 - oauth2client
-- ThreadPoolExecutor
 
 
 
@@ -34,6 +33,7 @@ import requests
 # REST Countries API로부터 데이터 가져오기
 response = requests.get('https://restcountries.com/v2/all')
 data = response.json()
+
 ```
 
 ### 2.2. Google Sheets에 데이터 저장
@@ -50,41 +50,54 @@ client = gspread.authorize(creds)
 
 # Google Sheets 문서 열기
 sheet = client.open('Your-Google-Sheet-Name').sheet1
+
 ```
 
 ### 2.3. 데이터 저장 함수 생성
-각 국가의 정보를 Google Sheets에 저장하기 위한 함수를 생성합니다. 함수는 각 국가의 이름, 지역, 인구수를 입력 받아 이를 Google Sheets에 추가합니다.
+이제, 각 국가의 정보를 Google Sheets에 저장하는 함수를 정의하고 이를 실행합니다. 함수는 각 국가의 이름, 국가 코드, 대륙 코드, 지역, 지역 상세, 인구수 그리고 위도와 경도를 받아 Google Sheets에 저장, 이 때, 위도와 경도 정보가 없는 경우에는 None으로 처리한다
 
 ```python
+import time
+
+# 첫 번째 행에 가져오는 데이터 정보를 입력
+header_row = ['국가명', '국가코드', '대륙코드', '지역', '지역상세', '인구수', '위도, 경도']
+sheet.insert_row(header_row, 1)  # 첫 번째 행에 삽입
+
 # 각 국가의 정보를 Google Sheets에 저장하는 함수
 def save_to_google_sheets(country):
-    row = [country['name'], country['region'], country['subregion'], country['population']]
+    row = [country['name'], country.get('alpha2Code'), country.get('alpha3Code'), country['region'], country['subregion'], country['population']]
+    if 'latlng' in country:
+        row.append(','.join(str(coord) for coord in country['latlng']))  # 위도와 경도를 하나의 문자열로 합쳐서 추가
+    else:
+        row.append(None)  # 위도와 경도가 없는 경우 None으로 채워집니다.
     sheet.append_row(row)
+    time.sleep(1)  # 1초 대기
+
+# 데이터 저장에 시간 간격을 두면서 Google Sheets에 저장
+for country in data:
+    save_to_google_sheets(country)
+
+print("Data has been saved to Google Sheets successfully.")
+
 ```
 ### 2.4. 데이터 저장 및 정렬
 각 국가의 정보를 Google Sheets에 저장하고, 저장된 데이터를 인구수를 기준으로 내림차순 정렬합니다.
 
 ```python
-from concurrent.futures import ThreadPoolExecutor
+# 첫 번째 행을 제외하고, 인구수(population) 열을 기준으로 내림차순으로 정렬
+sheet.sort(6, 'desc', False, 2)
 
-# 코드 시작 행에 구분 추가
-header_row = ['이름', '지역', '하위지역', '인구수']
-sheet.insert_row(header_row, index=1)
+print("인구수 기준으로 정렬되었습니다.")
 
-# ThreadPoolExecutor를 사용하여 병렬 처리
-with ThreadPoolExecutor() as executor:
-    executor.map(save_to_google_sheets, data)
-
-# 시트를 인구수(population) 열을 기준으로 내림차순으로 정렬
-sheet.sort((4, 'des'))
-
-print("데이터가 구글 스프레드시트에 저장되고 정렬되었습니다.")
 ```
 ## 3. Google Data Studio로 시각화
-마지막으로 Google Data Studio를 활용하여 Google Sheets에 저장된 데이터를 시각화합니다. 이를 통해 국가별 인구 통계를 한눈에 볼 수 있게 됩니다. Google Data Studio에서는 다양한 차트와 그래프 형태로 데이터를 시각화할 수 있으며, 원하는 시각화 형태를 선택하고 데이터 소스를 연결하면 됩니다.
+마지막으로 Google Data Studio를 활용하여 Google Sheets에 저장된 데이터를 시각화합니다. 이를 통해 국가별 인구 통계를 한눈에 볼 수 있게 됩니다. Google Data Studio에서는 다양한 차트와 그래프 형태로 데이터를 시각화할 수 있으며, 원하는 시각화 형태를 선택하고 데이터 소스를 연결하면 된다. 그리고 해당 시각화 자료에서 원하는 자료에 대해 클릭하면 드롭다운 되어 원하는 정보 확인이 가능하다
+
+![image](https://github.com/plintAn/World-Population/assets/124107186/85a9be25-8535-4352-8209-ee9705d876b3)
+
 
 ## 4. 결론
-이 프로젝트를 통해, REST Countries API에서 데이터를 가져오는 방법, Google Sheets에 데이터를 저장하고 정렬하는 방법, 그리고 Google Data Studio를 활용한 시각화에 대해 배울 수 있었습니다. 이렇게 얻어진 세계 인구 통계 데이터는 국가별 인구 통계 및 분포를 파악하는데 유용한 정보를 제공합니다.
+이 프로젝트를 통해 REST Countries API에서 세계 각국의 인구 데이터를 가져오는 방법, 그리고 Google Sheets에 데이터를 저장하고 정렬하는 방법, 마지막으로 Google Data Studio를 통해 데이터를 시각화하는 방법을 소개하였습니다. 이렇게 수집 및 시각화된 세계 인구 통계 데이터는 각 국가의 인구 통계 및 분포를 파악하는 데 유용한 정보를 제공한다.
 
 
 
